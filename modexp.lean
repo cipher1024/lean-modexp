@@ -3,10 +3,15 @@ import data.bitvec
 
 def word_size : ℕ := 32
 
+def window_size : ℕ := 32
+
 def num_vals : ℕ := 2^word_size
 
 @[reducible]
 def word := bitvec word_size
+
+@[reducible]
+def window := bitvec window_size
 
 open nat
 
@@ -96,9 +101,99 @@ sorry
 -- by just padding the number with zeros
 instance : add_monoid bignum :=
 { zero := zero
-, add := add
-, add_zero := sorry
-, zero_add := sorry
+, add  := add
+, add_zero  := sorry
+, zero_add  := sorry
 , add_assoc := sorry }
 
 end bignum
+
+namespace fin
+
+def pow {n} (b : fin (succ n)) : ℕ → fin (succ n)
+| 0        := 1
+| (succ n) := pow n * b
+
+infix `^` := pow
+
+@[simp] lemma pow_zero {n} (b : fin (succ n)) : b^0 = 1 := rfl
+
+instance {n} : monoid (fin (succ n)) :=
+{ one := has_one.one _
+, mul := has_mul.mul
+, mul_one := sorry
+, one_mul := sorry
+, mul_assoc := sorry }
+
+@[simp] lemma one_pow {n : ℕ} (k : ℕ) : (1 : fin (succ n))^k = 1 :=
+begin
+  induction k,
+  { simp },
+  { simp [pow,ih_1], }
+end
+
+end fin
+
+namespace list
+
+def to_nat (ws : list window) : ℕ :=
+sorry
+
+def from_nat (n : ℕ) : list window :=
+sorry
+
+end list
+
+namespace mod_group
+
+namespace version0
+
+open list
+
+def expmod {m : ℕ} (p : fin (succ m)) (e : list window) : fin (succ m) :=
+e.foldl (λ r w, r^window_size * p^w.to_nat) 1
+
+-- plan: translate foldl to foldr and induct on e
+theorem expmod_def {m : ℕ} (p : fin (succ m)) (e : list window)
+: expmod p e = p^e.to_nat :=
+sorry
+
+end version0
+
+-- tentative
+namespace version1
+
+open list
+
+def breakup : word → list window :=
+sorry
+
+-- return `window_size` sized windows from the most significant to the least
+def windows (p : bignum) : list window :=
+p.data.rev_list.bind breakup
+
+def from_windows (ws : list window) : bignum :=
+sorry
+
+@[simp]
+lemma from_windows_nil
+: from_windows nil = 0 :=
+sorry
+
+@[simp]
+lemma to_nat_zero
+: bignum.to_nat 0 = 0 :=
+sorry
+
+lemma windows_eq_nil_imp_self_eq_zero {p : bignum}
+  (h : windows p = nil)
+: p.to_nat = 0 :=
+sorry
+
+lemma to_nat_from_windows_windows_eq_to_nat_self {p : bignum}
+: (from_windows (windows p)).to_nat = p.to_nat :=
+sorry
+
+end version1
+
+end mod_group
