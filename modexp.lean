@@ -1,11 +1,23 @@
 
+import .lib.data.fin
+import .lib.data.list
+
 import data.bitvec
 
 def word_size : ℕ := 32
 
-def window_size : ℕ := 32
+def window_size : ℕ := 4
 
-def num_vals : ℕ := 2^word_size
+def word_vals : ℕ := 2^word_size
+
+def win_vals : ℕ := 2^window_size
+
+lemma win_vals_gt_one
+: win_vals > 1 :=
+begin
+  change (2 : ℕ)^0 < _,
+  admit,
+end
 
 @[reducible]
 def word := bitvec word_size
@@ -51,7 +63,7 @@ def add_carry (p q : bignum) : ℕ → word
    let c := (add_carry i).to_nat,
        x := (p.words $ succ i).to_nat,
        y := (q.words $ succ i).to_nat in
-   if num_vals ≤ c + x + y
+   if word_vals ≤ c + x + y
       then 1
       else 0
 
@@ -108,39 +120,31 @@ instance : add_monoid bignum :=
 
 end bignum
 
-namespace fin
-
-def pow {n} (b : fin (succ n)) : ℕ → fin (succ n)
-| 0        := 1
-| (succ n) := pow n * b
-
-infix `^` := pow
-
-@[simp] lemma pow_zero {n} (b : fin (succ n)) : b^0 = 1 := rfl
-
-instance {n} : monoid (fin (succ n)) :=
-{ one := has_one.one _
-, mul := has_mul.mul
-, mul_one := sorry
-, one_mul := sorry
-, mul_assoc := sorry }
-
-@[simp] lemma one_pow {n : ℕ} (k : ℕ) : (1 : fin (succ n))^k = 1 :=
-begin
-  induction k,
-  { simp },
-  { simp [pow,ih_1], }
-end
-
-end fin
-
 namespace list
 
-def to_nat (ws : list window) : ℕ :=
-sorry
+def to_nat : list window → ℕ
+ | [] := 0
+ | (w :: ws) := w.to_nat + window_size * to_nat ws
 
-def from_nat (n : ℕ) : list window :=
-sorry
+def from_nat : ℕ → list window
+| n :=
+if h : n > 0
+then
+  let x := n / win_vals,
+      y := n % win_vals in
+  have Hv_pos : 1 < win_vals, from sorry,
+  have Hlt : n * 1 < n * win_vals, from mul_lt_mul_of_pos_left Hv_pos h,
+  have Hdec : n / win_vals < n,
+     begin
+       rw [div_lt_iff_lt_mul],
+       { rw mul_one at Hlt,
+         apply Hlt },
+       apply lt_trans _ Hv_pos,
+       apply zero_lt_succ,
+     end,
+  (bitvec.of_nat _ y) :: from_nat x
+else
+  []
 
 end list
 
@@ -151,12 +155,19 @@ namespace version0
 open list
 
 def expmod {m : ℕ} (p : fin (succ m)) (e : list window) : fin (succ m) :=
-e.foldl (λ r w, r^window_size * p^w.to_nat) 1
+e.reverse.foldl (λ r w, r^window_size * p^w.to_nat) 1
 
--- plan: translate foldl to foldr and induct on e
 theorem expmod_def {m : ℕ} (p : fin (succ m)) (e : list window)
 : expmod p e = p^e.to_nat :=
-sorry
+begin
+  simp [expmod,foldl_eq_foldr],
+  induction e,
+  case nil
+  { simp [to_nat], },
+  case cons e es
+  { simp [foldr,ih_1],
+    simp [flip,to_nat,fin.pow_add,fin.pow_mul,fin.pow_pow_comm], }
+end
 
 end version0
 
