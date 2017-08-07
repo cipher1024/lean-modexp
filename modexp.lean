@@ -149,7 +149,7 @@ if h : n > 0
 then
   let x := n / win_vals,
       y := n % win_vals in
-  have Hv_pos : 1 < win_vals, from sorry,
+  have Hv_pos : 1 < win_vals, from win_vals_gt_one,
   have Hlt : n * 1 < n * win_vals, from mul_lt_mul_of_pos_left Hv_pos h,
   have Hdec : n / win_vals < n,
      begin
