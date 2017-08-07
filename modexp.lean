@@ -1,6 +1,7 @@
 
 import .lib.data.fin
 import .lib.data.list
+import .lib.data.pow
 
 import data.bitvec
 
@@ -12,11 +13,19 @@ def word_vals : ℕ := 2^word_size
 
 def win_vals : ℕ := 2^window_size
 
+lemma window_size_pos
+: window_size > 0 :=
+of_as_true trivial
+
 lemma win_vals_gt_one
 : win_vals > 1 :=
 begin
   change (2 : ℕ)^0 < _,
-  admit,
+  unfold win_vals,
+  rw [nat_pow_def,nat_pow_def],
+  apply pow_lt_pow,
+  { apply nat.lt_succ_self, },
+  apply window_size_pos
 end
 
 @[reducible]
