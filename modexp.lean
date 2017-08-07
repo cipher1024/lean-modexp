@@ -34,6 +34,8 @@ def word := bitvec word_size
 @[reducible]
 def window := bitvec window_size
 
+section defs
+
 open nat
 
 def up {n : ℕ} : fin n → fin (succ n)
@@ -45,6 +47,8 @@ structure bignum :=
   (data : array word cap)
   (all_zero : ∀ i, size ≤ up i → data.read i = 0)
   (msw_not_zero : ∀ last, fin.succ last = size → data.read last ≠ 0)
+
+end defs
 
 namespace bignum
 
@@ -65,6 +69,8 @@ if h : n < p.cap
    else 0
 
 namespace add
+
+open nat
 
 def add_carry (p q : bignum) : ℕ → word
  | 0 := 0
@@ -131,6 +137,8 @@ end bignum
 
 namespace list
 
+open nat
+
 def to_nat : list window → ℕ
  | [] := 0
  | (w :: ws) := w.to_nat + window_size * to_nat ws
@@ -159,9 +167,11 @@ end list
 
 namespace mod_group
 
+infix ^ := pow
+
 namespace version0
 
-open list
+open list nat
 
 def expmod {m : ℕ} (p : fin (succ m)) (e : list window) : fin (succ m) :=
 e.reverse.foldl (λ r w, r^window_size * p^w.to_nat) 1
@@ -175,7 +185,7 @@ begin
   { simp [to_nat], },
   case cons e es
   { simp [foldr,ih_1],
-    simp [flip,to_nat,fin.pow_add,fin.pow_mul,fin.pow_pow_comm], }
+    simp [flip,to_nat,pow_add,pow_mul,pow_pow_comm], }
 end
 
 end version0
