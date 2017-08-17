@@ -256,3 +256,71 @@ lemma free_spec (p : pointer) (vs : list word)
 sorry
 
 end
+
+namespace examples
+
+def swap_ptr (p q : pointer) : prog unit :=
+sorry
+
+def swap_ptr_spec (p q : pointer) (v₀ v₁ : word)
+: sat (swap_ptr p q) { pre := p ↦ v₀ :*: q ↦ v₁
+                     , post := λ _, p ↦ v₁ :*: q ↦ v₀ } :=
+sorry
+
+def map_list (p : pointer) : prog unit :=
+sorry
+
+def is_list : pointer → list word → hprop
+  | p [] := [| p = 0 |]
+  | p (v :: vs) := ∃∃ nx : word, [| nx ≠ 0 |] :*: p ↦* [v,nx] :*: is_list nx.to_nat vs
+
+lemma map_list_spec (p : pointer) (vs : list word)
+: sat (map_list p) { pre := is_list p vs,
+                     post := λ _, is_list p (list.map (+1) vs) } :=
+sorry
+
+def list_reverse (p : pointer) : prog pointer :=
+sorry
+
+def list_reverse' (p : pointer) : prog pointer :=
+sorry
+
+lemma list_reverse_spec (p : pointer) (vs : list word)
+: sat (list_reverse p) { pre := is_list p vs,
+                         post := λ q, is_list q (list.reverse vs) } :=
+sorry
+
+lemma list_reverse_spec' (p : pointer) (vs : list word)
+: sat (list_reverse' p) { pre := is_list p vs,
+                         post := λ q, is_list q (list.reverse vs) } :=
+sorry
+
+def list_reverse_dup (p : pointer) : prog pointer :=
+sorry
+
+lemma list_reverse_dup_spec (p : pointer) (vs : list word)
+: sat (list_reverse p) { pre := is_list p vs,
+                         post := λ q, is_list p vs :*: is_list q (list.reverse vs) } :=
+sorry
+
+inductive tree (α : Type u)
+  | leaf {} : tree
+  | node : tree → α → tree → tree
+
+def is_tree : pointer → tree word → hprop
+  | p tree.leaf := [| p = 0 |]
+  | p (tree.node l x r) := ∃∃ lp rp : word,
+          [| p ≠ 0 |] :*:
+          p ↦* [lp,x,rp] :*:
+          is_tree lp.to_nat l :*:
+          is_tree rp.to_nat r
+
+def free_tree : pointer → prog unit :=
+sorry
+
+lemma free_tree_spec (p : pointer) (t : tree word)
+: sat (free_tree p) { pre := is_tree p t
+                    , post := λ _, emp } :=
+sorry
+
+end examples
