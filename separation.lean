@@ -3,7 +3,7 @@ import data.bitvec
 
 universe u
 
-open nat
+open nat list
 
 @[reducible]
 def pointer := ℕ
@@ -145,6 +145,16 @@ def embed (p : Prop) : hprop := λ ptr, p ∧ emp ptr
 
 notation `[| `p` |]` := embed p
 
+@[simp]
+lemma embed_s_and_self (p : Prop)
+: [| p |] :*: [| p |] = [| p |] :=
+sorry
+
+lemma embed_eq_emp {p : Prop}
+  (hp : p)
+: [| p |] = emp :=
+sorry
+
 def hexists {α : Type u} (p : α → hprop) : hprop
  | ptr := ∃ i, p i ptr
 
@@ -247,6 +257,16 @@ begin
   rw H₂, ac_refl
 end
 
+lemma s_exists_intro_pre {P : prog β}
+  (H : ∀ x, sat P { pre := r x, post := r' })
+: sat P { pre := (∃∃ x, r x), post := r' } :=
+sorry
+
+lemma s_exists_intro_post {P : prog β} {b : α → β → hprop} (x : α)
+  (H : sat P { pre := p, post := b x })
+: sat P { pre := p, post := λ r, ∃∃ x, b x r } :=
+sorry
+
 lemma framing_spec  (q : hprop)
   (h : sat P { pre := p₁, post := r₁ })
   (Hpre : p = p₁ :*: q)
@@ -293,6 +313,9 @@ if h : (s.heap p).is_some then
       end }
 else state_t.lift none
 
+def modify (p : pointer) (f : word → word) : prog unit :=
+read p >>= write p ∘ f
+
 def alloc (vs : list word) : prog pointer := do
 s ← state_t.read,
 let r := s.next,
@@ -305,8 +328,6 @@ return r
 def alloc1 (v : word) : prog pointer := do
 alloc [v]
 
-open nat
-
 def free (p : pointer) (ln : ℕ) : prog unit := do
 s ← state_t.read,
 state_t.write
@@ -316,13 +337,79 @@ state_t.write
 def free1 (p : pointer) : prog unit := do
 free p 1
 
+lemma return_spec {α : Type} (x : α) (p : hprop)
+: sat (return x) { pre := p, post := λ y, [| x = y |] :*: p } :=
+sorry
+
+lemma return_spec' {α : Type} (x : α) (p : hprop)
+: sat (return x) { pre := p, post := λ y, p } :=
+sorry
+
 lemma read_spec (p : pointer) (v : word)
 : sat (read p) { pre := p ↦ v, post := λ r, [| r = v |] :*: p ↦ v } :=
+sorry
+
+lemma read_head_spec (p : pointer) (v : word) (vs : list word)
+: sat (read p) { pre := p ↦* v :: vs, post := λ r, [| r = v |] :*: p ↦* v :: vs } :=
+begin
+  simp [points_to_multiple,s_and_assoc],
+  apply framing_spec (p + 1 ↦* vs) (read_spec p v),
+  { ac_refl },
+  intro, ac_refl,
+end
+
+lemma read_nth_spec (p : pointer) (i : ℕ) (vs : list word)
+  (H : i < vs.length)
+: sat (read (p+i)) { pre := p ↦* vs, post := λ r, [| r = nth_le vs i H |] :*: p ↦* vs } :=
 sorry
 
 lemma write_spec (p : pointer) (v v' : word)
 : sat (write p v') { pre := p ↦ v, post := λ r, p ↦ v' } :=
 sorry
+
+lemma modify_spec (p : pointer) (f : word → word) (v : word)
+: sat (modify p f) { pre := p ↦ v, post := λ _, p ↦ f v } :=
+begin
+  unfold modify,
+  apply bind_spec _ (read_spec p v),
+  intro x, simp [function.comp],
+  apply context_left,
+  intro, subst x,
+  apply write_spec
+end
+
+lemma modify_head_spec (p : pointer) (f : word → word) (v : word) (vs : list word)
+: sat (modify p f) { pre := p ↦* v :: vs, post := λ _, p ↦* f v :: vs } :=
+begin
+  unfold points_to_multiple,
+  apply framing_right,
+  apply modify_spec,
+end
+
+def replace {α} (f : α → α) : ℕ → list α → list α
+  | i [] := []
+  | 0 (x :: xs) := f x :: xs
+  | (succ i) (x :: xs) := x :: replace i xs
+
+lemma modify_nth_spec (p : pointer) (f : word → word) (i : ℕ) (vs : list word)
+  (H : i < vs.length)
+: sat (modify (p+i) f) { pre := p ↦* vs, post := λ _, p ↦* replace f i vs } :=
+begin
+  revert i p,
+  induction vs with v vs
+  ; intros i p H,
+  { cases nat.not_lt_zero _ H, },
+  cases i,
+  case zero
+  { simp [replace],
+    apply modify_head_spec },
+  case succ i
+  { simp [replace,points_to_multiple],
+    apply framing_left,
+    rw [add_succ,add_succ,← succ_add,add_zero],
+    apply ih_1 i (succ p),
+    apply lt_of_succ_lt_succ H, }
+end
 
 lemma alloc_spec (vs : list word)
 : sat (alloc vs) { pre := emp, post := λ r, r ↦* vs } :=
@@ -396,17 +483,59 @@ begin
   { intro x, cases x, simp },
 end
 
-def map_list (p : pointer) : prog unit :=
-sorry
+def map_list : pointer → ℕ → prog unit
+ | _ 0 := return ()
+ | p (succ n) := do
+if h : p = 0
+then return ()
+else do
+  modify p (+1),
+  p' ← read $ p+1,
+  map_list p'.to_nat n
 
 def is_list : pointer → list word → hprop
   | p [] := [| p = 0 |]
-  | p (v :: vs) := ∃∃ nx : word, [| nx ≠ 0 |] :*: p ↦* [v,nx] :*: is_list nx.to_nat vs
+  | p (v :: vs) := [| p ≠ 0 |] :*: ∃∃ nx : word, p ↦* [v,nx] :*: is_list nx.to_nat vs
 
-lemma map_list_spec (p : pointer) (vs : list word)
-: sat (map_list p) { pre := is_list p vs,
-                     post := λ _, is_list p (list.map (+1) vs) } :=
-sorry
+lemma map_list_spec (p : pointer) (vs : list word) (n : ℕ)
+  (H : vs.length < n)
+: sat (map_list p n)
+    { pre := is_list p vs
+    , post := λ _, is_list p (list.map (+1) vs) } :=
+begin
+  revert n p,
+  induction vs ; intros n p H,
+  case nil
+  { unfold map is_list,
+    rw ← embed_s_and_self,
+    apply context_left, simp,
+    cases n with n, cases not_lt_zero _ H,
+    intro Hp₀, dsimp [map_list],
+    rw if_pos Hp₀,
+    apply return_spec' },
+  case cons x xs
+  { unfold map is_list,
+    cases n with n, cases not_lt_zero _ H,
+    apply context_left, intro Hp_nz,
+    unfold map_list,
+    rw if_neg Hp_nz, simp,
+    apply s_exists_intro_pre _,
+    intro nx,
+    apply bind_framing_right (is_list (bitvec.to_nat nx) xs)
+                             (modify_head_spec p (+1) x [nx]),
+    { ac_refl },
+    intro x, cases x, simp,
+    apply bind_framing_right (is_list (bitvec.to_nat nx) xs)
+                             (read_nth_spec p 1 [x+1,nx] (of_as_true trivial)),
+    { ac_refl },
+    intro r_nx, simp [nth_le,embed_eq_emp Hp_nz],
+    rw [← s_and_comm,s_and_assoc],
+    apply context_left, intro Hnx,
+    subst r_nx,
+    apply s_exists_intro_post nx,
+    apply framing_left,
+    apply ih_1, apply lt_of_succ_lt_succ H, }
+end
 
 def list_reverse (p : pointer) : prog pointer :=
 sorry
