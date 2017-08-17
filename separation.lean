@@ -3,9 +3,15 @@ import data.bitvec
 
 universe u
 
+open nat
+
+@[reducible]
+def pointer := ℕ
+
+@[reducible]
 def word := bitvec 32
 
-def heap := ℕ → option word
+def heap := pointer → option word
 
 structure hstate :=
   (heap : heap)
@@ -17,8 +23,6 @@ def prog := state_t hstate option
 
 def hprop := heap → Prop
 
-local attribute [instance] classical.prop_decidable
-
 def disjoint (h₀ h₁ : heap) :=
 (∀ p, h₀ p = none ∨ h₁ p = none)
 
@@ -27,10 +31,38 @@ infix ` ## `:51 := disjoint
 def part'  (h₀ h₁ : heap) (_ : h₀ ## h₁) : heap
  | p := h₀ p <|> h₁ p
 
+def maplet (p : pointer) (v : word) : heap
+  | q :=
+if p = q then some v else none
+
+def heap.emp : heap :=
+λ _, none
+
+def heap.mk : pointer → list word → heap
+| _ [] := heap.emp
+| p (v :: vs) := λ q, maplet p v q <|> heap.mk (p+1) vs q
+
+def left_combine (h₀ h₁ : heap) : heap
+ | p := h₀ p <|> h₁ p
+
+def heap.delete : pointer → ℕ → heap → heap
+ | p 0 h q := h q
+ | p (succ n) h q :=
+if p = q then none
+else heap.delete (p+1) n h q
+
+infix ` <+ `:54 := left_combine
+
+section noncomp
+
+local attribute [instance] classical.prop_decidable
+
 noncomputable def part (h₀ h₁ : heap) : option heap :=
 if Hd : disjoint h₀ h₁
 then some (part' h₀ h₁ Hd)
 else none
+
+end noncomp
 
 lemma part_comm (h₀ h₁ : heap)
 : part h₀ h₁ = part h₁ h₀ :=
@@ -99,6 +131,15 @@ lemma s_and_part {h₀ h₁ : heap} {p₀ p₁ : hprop}
 : (p₀ :*: p₁) (part' h₀ h₁ h) :=
 sorry
 
+def embed (p : Prop) : hprop := λ ptr, p ∧ emp ptr
+
+notation `[| `p` |]` := embed p
+
+def hexists {α : Type u} (p : α → hprop) : hprop
+ | ptr := ∃ i, p i ptr
+
+notation `∃∃` binders `, ` r:(scoped P, hexists P) := r
+
 lemma s_and_comm (p q : hprop)
 : p :*: q = q :*: p := sorry
 
@@ -113,10 +154,12 @@ sorry
 
 section
 
-variables {α : Type}
+variables {α β : Type}
 variable P : prog α
+variable P' : α → prog β
 variables p q : hprop
 variables r : α → hprop
+variables r' : β → hprop
 variable s : spec α
 
 lemma framing
@@ -144,5 +187,72 @@ begin
   { rw [part'_part_assoc _ (disjoint_symm Hdisj),part_comm'] at Hpart,
     apply Hpart, },
 end
+
+lemma bind
+  (h  : sat P { pre := p, post := r })
+  (h' : ∀ x, sat (P' x) { pre := r x, post := r' })
+: sat (P >>= P') { pre := p, post := r' } :=
+sorry
+
+lemma option.get_eq_of_is_some {x : option α}
+  (h : option.is_some x)
+: x = some (option.get h) :=
+sorry
+
+def read (p : pointer) : prog word := do
+h ← state_t.read,
+state_t.lift $ h.heap p
+
+def write (p : pointer) (v : word) : prog unit := do
+s ← state_t.read,
+if h : (s.heap p).is_some then
+  state_t.write
+    { s with
+      heap := (λ q : pointer, if p = q then some v else s.heap q)
+    , free :=
+      begin
+        intros q h',
+        by_cases p = q with h'',
+        { rw if_pos h'',
+          exfalso, subst q,
+          have h₃ := s.free p h',
+          rw option.get_eq_of_is_some h at h₃,
+          contradiction },
+        { rw if_neg h'', apply s.free _ h' }
+      end }
+else state_t.lift none
+
+def alloc (vs : list word) : prog pointer := do
+s ← state_t.read,
+let r := s.next,
+state_t.write
+  { s with next := s.next + vs.length,
+           heap := heap.mk r vs <+ s.heap,
+           free := sorry },
+return r
+
+open nat
+
+def free (p : pointer) (ln : ℕ) : prog unit := do
+s ← state_t.read,
+state_t.write
+  { s with heap := heap.delete p ln s.heap,
+           free := sorry }
+
+lemma read_spec (p : pointer) (v : word)
+: sat (read p) { pre := p ↦ v, post := λ r, [| v = r |] :*: p ↦ v } :=
+sorry
+
+lemma write_spec (p : pointer) (v v' : word)
+: sat (write p v') { pre := p ↦ v, post := λ r, p ↦ v' } :=
+sorry
+
+lemma alloc_spec (vs : list word)
+: sat (alloc vs) { pre := emp, post := λ r, r ↦* vs } :=
+sorry
+
+lemma free_spec (p : pointer) (vs : list word)
+: sat (free p vs.length) { pre := p ↦* vs, post := λ r, emp } :=
+sorry
 
 end
