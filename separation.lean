@@ -100,6 +100,16 @@ infix ` :*: `:55 := s_and
 def emp : hprop
  | h := ∀ p, h p = none
 
+@[simp]
+lemma s_and_emp (p : hprop)
+: p :*: emp = p :=
+sorry
+
+@[simp]
+lemma emp_s_and (p : hprop)
+: emp :*: p = p :=
+sorry
+
 def points_to (p : ℕ) (val : word) : hprop
  | h := h p = some val ∧
         ∀ q, q ≠ p → h q = none
@@ -144,7 +154,10 @@ lemma s_and_comm (p q : hprop)
 : p :*: q = q :*: p := sorry
 
 lemma s_and_assoc (p q r : hprop)
-: p :*: (q :*: r) = (p :*: q) :*: r := sorry
+: (p :*: q) :*: r = p :*: (q :*: r) := sorry
+
+instance : is_associative hprop s_and := ⟨ s_and_assoc ⟩
+instance : is_commutative hprop s_and := ⟨ s_and_comm ⟩
 
 lemma disjoint_disjoint {h₁ h₂ h₃ : heap}
   (H₁ : h₂ ## h₃)
@@ -155,14 +168,14 @@ sorry
 section
 
 variables {α β : Type}
-variable P : prog α
-variable P' : α → prog β
-variables p q : hprop
-variables r : α → hprop
-variables r' : β → hprop
-variable s : spec α
+variables {P : prog α}
+variable {P' : α → prog β}
+variables {p p₀ p₁ q : hprop}
+variables {r r₁ : α → hprop}
+variables {r' : β → hprop}
+variable {s : spec α}
 
-lemma framing
+lemma framing_right (q : hprop)
   (h : sat P { pre := p, post := r })
 : sat P { pre := p :*: q, post := λ x, r x :*: q } :=
 begin
@@ -188,11 +201,69 @@ begin
     apply Hpart, },
 end
 
-lemma bind
+lemma framing_left (q : hprop)
+  (h : sat P { pre := p, post := r })
+: sat P { pre := q :*: p, post := λ x, q :*: r x } :=
+sorry
+
+lemma bind_spec (r : α → hprop)
   (h  : sat P { pre := p, post := r })
   (h' : ∀ x, sat (P' x) { pre := r x, post := r' })
 : sat (P >>= P') { pre := p, post := r' } :=
 sorry
+
+lemma postcondition (r : α → hprop)
+ (Hspec : sat P { pre := p, post := r })
+ (Hside : ∀ x, r x = r₁ x)
+: sat P { pre := p, post := r₁ } :=
+sorry
+
+lemma precondition (p : hprop)
+ (Hspec : sat P { pre := p, post := r })
+ (Hside : p = q)
+: sat P { pre := q, post := r } :=
+by { subst q, apply Hspec }
+
+lemma bind_framing_left (p₁ : hprop)
+  (H₀ : sat P { pre := p₀, post := r })
+  (H₂ : p = p₀ :*: p₁)
+  (H₁ : ∀ x, sat (P' x) { pre := r x :*: p₁, post := r' } )
+: sat (P >>= P') { pre := p, post := r' } :=
+begin
+  apply precondition _ _ H₂.symm,
+  apply bind_spec (λ x, r x :*: p₁),
+  { apply framing_right _ H₀, },
+  apply H₁,
+end
+
+lemma bind_framing_right (p₀ : hprop)
+  (H₀ : sat P { pre := p₁, post := r })
+  (H₂ : p = p₀ :*: p₁)
+  (H₁ : ∀ x, sat (P' x) { pre := p₀ :*: r x, post := r' } )
+: sat (P >>= P') { pre := p, post := r' } :=
+begin
+  simp [s_and_comm p₀ _] at H₁,
+  apply bind_framing_left p₀ H₀ _ H₁,
+  rw H₂, ac_refl
+end
+
+lemma framing_spec  (q : hprop)
+  (h : sat P { pre := p₁, post := r₁ })
+  (Hpre : p = p₁ :*: q)
+  (Hpost : ∀ x, r x = r₁ x :*: q)
+: sat P { pre := p, post := λ x, r x } :=
+begin
+  simp [Hpre,Hpost],
+  apply framing_right _ h
+end
+
+lemma context_left (p : Prop)
+ (H : p → sat P { pre := q, post := r })
+: sat P { pre := [| p |] :*: q, post := r } := sorry
+
+lemma context_right (p : Prop)
+ (H : p → sat P { pre := q, post := r })
+: sat P { pre := q :*: [| p |], post := r } := sorry
 
 lemma option.get_eq_of_is_some {x : option α}
   (h : option.is_some x)
@@ -231,6 +302,9 @@ state_t.write
            free := sorry },
 return r
 
+def alloc1 (v : word) : prog pointer := do
+alloc [v]
+
 open nat
 
 def free (p : pointer) (ln : ℕ) : prog unit := do
@@ -239,8 +313,11 @@ state_t.write
   { s with heap := heap.delete p ln s.heap,
            free := sorry }
 
+def free1 (p : pointer) : prog unit := do
+free p 1
+
 lemma read_spec (p : pointer) (v : word)
-: sat (read p) { pre := p ↦ v, post := λ r, [| v = r |] :*: p ↦ v } :=
+: sat (read p) { pre := p ↦ v, post := λ r, [| r = v |] :*: p ↦ v } :=
 sorry
 
 lemma write_spec (p : pointer) (v v' : word)
@@ -251,21 +328,73 @@ lemma alloc_spec (vs : list word)
 : sat (alloc vs) { pre := emp, post := λ r, r ↦* vs } :=
 sorry
 
+lemma alloc1_spec (v : word)
+: sat (alloc1 v) { pre := emp, post := λ r, r ↦ v } :=
+begin
+  have h := alloc_spec [v],
+  unfold points_to_multiple at h,
+  simp [s_and_emp] at h,
+  apply h
+end
+
 lemma free_spec (p : pointer) (vs : list word)
 : sat (free p vs.length) { pre := p ↦* vs, post := λ r, emp } :=
 sorry
+
+lemma free1_spec (p : pointer) (v : word)
+: sat (free1 p) { pre := p ↦ v, post := λ r, emp } :=
+sorry
+
+def copy (p q : pointer) : prog unit := do
+v ← read q,
+write p v
+
+lemma copy_spec (p q : pointer) (v₀ v₁ : word)
+: sat (copy p q) { pre := p ↦ v₀ :*: q ↦ v₁
+                 , post := λ _, p ↦ v₁ :*: q ↦ v₁ } :=
+begin
+  apply bind_spec (λ r, p ↦ v₀ :*: ([| r = v₁ |] :*: q ↦ v₁)),
+  { apply framing_left, apply read_spec },
+  { intro r, simp,
+    apply precondition (p ↦ v₀ :*: q ↦ v₁ :*: [| r = v₁ |]),
+    { apply context_right, intro, subst r,
+      apply framing_right,
+      apply write_spec },
+    { ac_refl } }
+end
 
 end
 
 namespace examples
 
-def swap_ptr (p q : pointer) : prog unit :=
-sorry
+def swap_ptr (p q : pointer) : prog unit := do
+t ← alloc1 0,
+copy t p,
+copy p q,
+copy q t,
+free1 t
 
-def swap_ptr_spec (p q : pointer) (v₀ v₁ : word)
+lemma swap_ptr_spec (p q : pointer) (v₀ v₁ : word)
 : sat (swap_ptr p q) { pre := p ↦ v₀ :*: q ↦ v₁
                      , post := λ _, p ↦ v₁ :*: q ↦ v₀ } :=
-sorry
+begin
+  unfold swap_ptr,
+  apply bind_framing_right (p ↦ v₀ :*: q ↦ v₁) (alloc1_spec _),
+  { simp [s_and_emp] },
+  intro t, simp,
+  apply bind_framing_right (q ↦ v₁) (copy_spec t p 0 v₀),
+  { ac_refl },
+  intro x, cases x, simp,
+  apply bind_framing_right (t ↦ v₀) (copy_spec p q v₀ v₁),
+  { ac_refl },
+  intro x, cases x, simp,
+  apply bind_framing_right (p ↦ v₁) (copy_spec q t v₁ v₀),
+  { ac_refl },
+  intro x, cases x, simp, rw ← s_and_assoc,
+  apply framing_spec (p ↦ v₁ :*: q ↦ v₀)  (free1_spec t v₀),
+  { ac_refl },
+  { intro x, cases x, simp },
+end
 
 def map_list (p : pointer) : prog unit :=
 sorry
