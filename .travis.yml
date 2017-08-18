@@ -83,10 +83,11 @@ script:
 - lean -v || echo "success"
 - lean --path
 - export LEAN_PATH=`pwd`:`pwd`/lean-lib:$HOME/lean/bin/../lib/lean/library:$HOME/lean/bin/../library
+- lean --path
 - echo $LEAN_PATH
-- git submodule sync
+# - git submodule sync
 - leanpkg configure
-- lean --make . lean-lib/
+- lean --make
 notifications:
   slack:
     rooms:
