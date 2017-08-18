@@ -1,15 +1,21 @@
 
 import data.bitvec
+import util.logic
+import util.control.monad.non_termination
 
-universe u
+universes u v
 
-open nat list
+open nat list function
 
 @[reducible]
 def pointer := ℕ
 
-@[reducible]
-def word := bitvec 32
+structure word :=
+to_word :: (to_ptr : ℕ)
+
+instance : has_zero word := ⟨ ⟨ 0 ⟩ ⟩
+instance : has_one word := ⟨ ⟨ 1 ⟩ ⟩
+instance : has_add word := ⟨ λ x y, ⟨ x.to_ptr + y.to_ptr ⟩ ⟩
 
 def heap := pointer → option word
 
@@ -19,9 +25,38 @@ structure hstate :=
   (free : ∀ p, p ≥ next → heap p = none)
 
 @[reducible]
-def prog := state_t hstate option
+def program := state_t hstate nonterm
 
-def hprop := heap → Prop
+def program.fix {α : Type u} {β : Type}
+  (f : (α → program β) → α → program β) : α → program β :=
+curry (@nonterm.fix (α × hstate) (β × hstate) $ λ g, uncurry (f $ curry g))
+
+def program.fix2 {α : Type u} {α' : Type v} {β : Type}
+  (f : (α → α' → program β) → α → α' → program β) : α → α' → program β :=
+curry (program.fix $ λ g, uncurry (f $ curry g))
+
+def program.fix_unroll {α : Type u} {β : Type}
+  (f : (α → program β) → α → program β)
+: program.fix f = f (program.fix f) :=
+begin
+  unfold program.fix,
+  transitivity,
+  rw [nonterm.unroll,curry_uncurry],
+  refl,
+end
+
+def program.fix2_unroll {α : Type u} {α' : Type v} {β : Type}
+  (f : (α → α' → program β) → α → α' → program β)
+: program.fix2 f = f (program.fix2 f) :=
+begin
+  unfold program.fix2,
+  transitivity,
+  rw [program.fix_unroll,curry_uncurry],
+  refl,
+end
+
+structure hprop :=
+  (apply : heap → Prop)
 
 def disjoint (h₀ h₁ : heap) :=
 (∀ p, h₀ p = none ∨ h₁ p = none)
@@ -93,12 +128,13 @@ lemma part'_of_part {h h₀ h₁ : heap}
 : h = part' h₀ h₁ (disjoint_of_part H) :=
 sorry
 
-def s_and (p q : hprop) : hprop
- | h := ∃ h₀ h₁, some h = part h₀ h₁ ∧ p h₀ ∧ q h₁
+def s_and (p q : hprop) : hprop :=
+⟨ λ h, ∃ h₀ h₁ d, h = part' h₀ h₁ d ∧ p.apply h₀ ∧ q.apply h₁ ⟩
+
 infix ` :*: `:55 := s_and
 
-def emp : hprop
- | h := ∀ p, h p = none
+def emp : hprop :=
+⟨ λ h, ∀ p, h p = none ⟩
 
 @[simp]
 lemma s_and_emp (p : hprop)
@@ -110,9 +146,9 @@ lemma emp_s_and (p : hprop)
 : emp :*: p = p :=
 sorry
 
-def points_to (p : ℕ) (val : word) : hprop
- | h := h p = some val ∧
-        ∀ q, q ≠ p → h q = none
+def points_to (p : ℕ) (val : word) : hprop :=
+⟨ λ h, h p = some val ∧
+        ∀ q, q ≠ p → h q = none ⟩
 
 infix ` ↦ `:60 := points_to
 
@@ -126,22 +162,23 @@ structure spec (r : Type u) :=
   (pre : hprop)
   (post : r → hprop)
 
-def sat {α} (p : prog α) (s : spec α) : Prop :=
+def sat {α} (p : program α) (s : spec α) : Prop :=
 ∀ (σ : hstate) h₀ h₁,
    some σ.heap = part h₀ h₁ →
-   s.pre h₀ →
-(∃ r σ' h', p σ = some (r, σ') ∧
+   s.pre.apply h₀ →
+(∃ r σ' h', p σ ~> (r, σ') ∧
             some σ'.heap = part h₁ h' ∧
-            s.post r h')
+            (s.post r).apply h')
 
 lemma s_and_part {h₀ h₁ : heap} {p₀ p₁ : hprop}
   (h : h₀ ## h₁)
-  (Hp₀ : p₀ h₀)
-  (Hp₁ : p₁ h₁)
-: (p₀ :*: p₁) (part' h₀ h₁ h) :=
+  (Hp₀ : p₀.apply h₀)
+  (Hp₁ : p₁.apply h₁)
+: (p₀ :*: p₁).apply (part' h₀ h₁ h) :=
 sorry
 
-def embed (p : Prop) : hprop := λ ptr, p ∧ emp ptr
+def embed (p : Prop) : hprop :=
+⟨ λ ptr, p ∧ emp.apply ptr ⟩
 
 notation `[| `p` |]` := embed p
 
@@ -155,8 +192,8 @@ lemma embed_eq_emp {p : Prop}
 : [| p |] = emp :=
 sorry
 
-def hexists {α : Type u} (p : α → hprop) : hprop
- | ptr := ∃ i, p i ptr
+def hexists {α : Type u} (p : α → hprop) : hprop :=
+⟨ λ ptr, ∃ i, (p i).apply ptr ⟩
 
 notation `∃∃` binders `, ` r:(scoped P, hexists P) := r
 
@@ -175,11 +212,28 @@ lemma disjoint_disjoint {h₁ h₂ h₃ : heap}
 : h₁ ## h₃ :=
 sorry
 
+lemma s_exists_s_and_distr {α : Type u}
+  (p : α → hprop) (q : hprop)
+: (∃∃ x, p x) :*: q = (∃∃ x, p x :*: q) :=
+sorry
+
+lemma s_and_s_exists_distr {α : Type u}
+  (p : α → hprop) (q : hprop)
+: q :*: (∃∃ x, p x) = (∃∃ x, q :*: p x) :=
+sorry
+
+@[congr]
+lemma s_exists_congr {α : Type u}
+  {p q : α → hprop}
+  (h : ∀ x, p x = q x)
+: hexists p = hexists q :=
+sorry
+
 section
 
 variables {α β : Type}
-variables {P : prog α}
-variable {P' : α → prog β}
+variables {P : program α}
+variable {P' : α → program β}
 variables {p p₀ p₁ q : hprop}
 variables {r r₁ : α → hprop}
 variables {r' : β → hprop}
@@ -192,9 +246,10 @@ begin
   unfold sat spec.pre spec.post,
   introv Hpart Hpre,
   cases Hpre with h₂ Hpre, cases Hpre with h₃ Hpre,
-  rw part'_of_part Hpre.left at Hpart,
+  cases Hpre with d Hpre,
+  rw Hpre.left at Hpart,
   cases Hpre with Hpre₀ Hpre₁, cases Hpre₁ with Hpre₁ Hpre₂,
-  have Hdisj := disjoint_disjoint (disjoint_of_part Hpre₀) (disjoint_of_part Hpart),
+  have Hdisj := disjoint_disjoint d (disjoint_of_part Hpart),
   have h' := h σ h₂ (part' h₁ h₃ Hdisj) _ Hpre₁, unfold spec.pre spec.post at h',
   { rw part_comm at Hpart,
     cases h' with x h', cases h' with σ' h', cases h' with h' h''',
@@ -257,12 +312,17 @@ begin
   rw H₂, ac_refl
 end
 
-lemma s_exists_intro_pre {P : prog β}
+lemma s_exists_intro_pre {P : program β}
   (H : ∀ x, sat P { pre := r x, post := r' })
 : sat P { pre := (∃∃ x, r x), post := r' } :=
 sorry
 
-lemma s_exists_intro_post {P : prog β} {b : α → β → hprop} (x : α)
+lemma s_exists_elim_pre {P : program β} (x : α)
+  (H : sat P { pre := (∃∃ x, r x), post := r' })
+: sat P { pre := r x, post := r' } :=
+sorry
+
+lemma s_exists_intro_post {P : program β} {b : α → β → hprop} (x : α)
   (H : sat P { pre := p, post := b x })
 : sat P { pre := p, post := λ r, ∃∃ x, b x r } :=
 sorry
@@ -290,11 +350,11 @@ lemma option.get_eq_of_is_some {x : option α}
 : x = some (option.get h) :=
 sorry
 
-def read (p : pointer) : prog word := do
+def read (p : pointer) : program word := do
 h ← state_t.read,
-state_t.lift $ h.heap p
+state_t.lift $ option.rec_on (h.heap p) nonterm.diverge return
 
-def write (p : pointer) (v : word) : prog unit := do
+def write (p : pointer) (v : word) : program unit := do
 s ← state_t.read,
 if h : (s.heap p).is_some then
   state_t.write
@@ -311,12 +371,12 @@ if h : (s.heap p).is_some then
           contradiction },
         { rw if_neg h'', apply s.free _ h' }
       end }
-else state_t.lift none
+else state_t.lift nonterm.diverge
 
-def modify (p : pointer) (f : word → word) : prog unit :=
+def modify (p : pointer) (f : word → word) : program unit :=
 read p >>= write p ∘ f
 
-def alloc (vs : list word) : prog pointer := do
+def alloc (vs : list word) : program pointer := do
 s ← state_t.read,
 let r := s.next,
 state_t.write
@@ -325,24 +385,24 @@ state_t.write
            free := sorry },
 return r
 
-def alloc1 (v : word) : prog pointer := do
+def alloc1 (v : word) : program pointer := do
 alloc [v]
 
-def free (p : pointer) (ln : ℕ) : prog unit := do
+def free (p : pointer) (ln : ℕ) : program unit := do
 s ← state_t.read,
 state_t.write
   { s with heap := heap.delete p ln s.heap,
            free := sorry }
 
-def free1 (p : pointer) : prog unit := do
+def free1 (p : pointer) : program unit := do
 free p 1
 
-lemma return_spec {α : Type} (x : α) (p : hprop)
-: sat (return x) { pre := p, post := λ y, [| x = y |] :*: p } :=
+lemma return_spec' {α : Type} (x : α) (p : hprop)
+: sat (return x) { pre := p, post := λ _, p } :=
 sorry
 
-lemma return_spec' {α : Type} (x : α) (p : hprop)
-: sat (return x) { pre := p, post := λ y, p } :=
+lemma return_spec {α : Type} (x : α) (p : α → hprop)
+: sat (return x) { pre := p x, post := λ y, p y } :=
 sorry
 
 lemma read_spec (p : pointer) (v : word)
@@ -367,6 +427,20 @@ lemma write_spec (p : pointer) (v v' : word)
 : sat (write p v') { pre := p ↦ v, post := λ r, p ↦ v' } :=
 sorry
 
+def replace {α} (f : α → α) : ℕ → list α → list α
+  | i [] := []
+  | 0 (x :: xs) := f x :: xs
+  | (succ i) (x :: xs) := x :: replace i xs
+
+lemma write_head_spec (p : pointer) (v v' : word) (vs : list word)
+: sat (write p v') { pre := p ↦* v :: vs, post := λ _, p ↦* v' :: vs } :=
+sorry
+
+lemma write_nth_spec (p : pointer) (v' : word) (i : ℕ) (vs : list word)
+  (H : i < vs.length)
+: sat (write (p+i) v') { pre := p ↦* vs, post := λ _, p ↦* replace (const _ v') i vs } :=
+sorry
+
 lemma modify_spec (p : pointer) (f : word → word) (v : word)
 : sat (modify p f) { pre := p ↦ v, post := λ _, p ↦ f v } :=
 begin
@@ -386,10 +460,6 @@ begin
   apply modify_spec,
 end
 
-def replace {α} (f : α → α) : ℕ → list α → list α
-  | i [] := []
-  | 0 (x :: xs) := f x :: xs
-  | (succ i) (x :: xs) := x :: replace i xs
 
 lemma modify_nth_spec (p : pointer) (f : word → word) (i : ℕ) (vs : list word)
   (H : i < vs.length)
@@ -432,7 +502,7 @@ lemma free1_spec (p : pointer) (v : word)
 : sat (free1 p) { pre := p ↦ v, post := λ r, emp } :=
 sorry
 
-def copy (p q : pointer) : prog unit := do
+def copy (p q : pointer) : program unit := do
 v ← read q,
 write p v
 
@@ -454,7 +524,7 @@ end
 
 namespace examples
 
-def swap_ptr (p q : pointer) : prog unit := do
+def swap_ptr (p q : pointer) : program unit := do
 t ← alloc1 0,
 copy t p,
 copy p q,
@@ -483,49 +553,61 @@ begin
   { intro x, cases x, simp },
 end
 
-def map_list : pointer → ℕ → prog unit
- | _ 0 := return ()
- | p (succ n) := do
+open program
+
+def map_list : pointer → program unit :=
+fix $ λ map_list p,
 if h : p = 0
 then return ()
 else do
   modify p (+1),
   p' ← read $ p+1,
-  map_list p'.to_nat n
+  map_list p'.to_ptr
+
+lemma map_list_def (p : pointer)
+: map_list p =
+  if p = 0 then return ()
+  else do
+    modify p (+1),
+    p' ← read $ p+1,
+    map_list p'.to_ptr :=
+begin
+  unfold map_list,
+  transitivity,
+  rw [program.fix_unroll,dif_eq_if], refl
+end
+
 
 def is_list : pointer → list word → hprop
   | p [] := [| p = 0 |]
-  | p (v :: vs) := [| p ≠ 0 |] :*: ∃∃ nx : word, p ↦* [v,nx] :*: is_list nx.to_nat vs
+  | p (v :: vs) := [| p ≠ 0 |] :*: ∃∃ nx : word, p ↦* [v,nx] :*: is_list nx.to_ptr vs
 
-lemma map_list_spec (p : pointer) (vs : list word) (n : ℕ)
-  (H : vs.length < n)
-: sat (map_list p n)
+lemma map_list_spec (p : pointer) (vs : list word)
+: sat (map_list p)
     { pre := is_list p vs
     , post := λ _, is_list p (list.map (+1) vs) } :=
 begin
-  revert n p,
-  induction vs ; intros n p H,
+  revert p,
+  induction vs ; intros p,
   case nil
   { unfold map is_list,
     rw ← embed_s_and_self,
     apply context_left, simp,
-    cases n with n, cases not_lt_zero _ H,
-    intro Hp₀, dsimp [map_list],
+    intro Hp₀, rw [map_list_def],
     rw if_pos Hp₀,
     apply return_spec' },
   case cons x xs
   { unfold map is_list,
-    cases n with n, cases not_lt_zero _ H,
     apply context_left, intro Hp_nz,
-    unfold map_list,
+    rw [map_list_def],
     rw if_neg Hp_nz, simp,
     apply s_exists_intro_pre _,
     intro nx,
-    apply bind_framing_right (is_list (bitvec.to_nat nx) xs)
+    apply bind_framing_right (is_list (nx.to_ptr) xs)
                              (modify_head_spec p (+1) x [nx]),
     { ac_refl },
     intro x, cases x, simp,
-    apply bind_framing_right (is_list (bitvec.to_nat nx) xs)
+    apply bind_framing_right (is_list (nx.to_ptr) xs)
                              (read_nth_spec p 1 [x+1,nx] (of_as_true trivial)),
     { ac_refl },
     intro r_nx, simp [nth_le,embed_eq_emp Hp_nz],
@@ -534,13 +616,88 @@ begin
     subst r_nx,
     apply s_exists_intro_post nx,
     apply framing_left,
-    apply ih_1, apply lt_of_succ_lt_succ H, }
+    apply ih_1, }
 end
 
-def list_reverse (p : pointer) : prog pointer :=
-sorry
+def list_reverse_aux : ∀ (p r : pointer),  program pointer :=
+fix2 $ λ list_reverse_aux p r,
+if p = 0 then return r
+else do
+  p' ← read (p+1),
+  write (p+1) ⟨ r ⟩,
+  list_reverse_aux p'.to_ptr p
 
-def list_reverse' (p : pointer) : prog pointer :=
+lemma list_reverse_aux_def (p r : pointer)
+: list_reverse_aux p r =
+  if p = 0 then return r
+  else do
+    p' ← read (p+1),
+    write (p+1) ⟨ r ⟩,
+    list_reverse_aux p'.to_ptr p :=
+begin
+  unfold list_reverse_aux,
+  transitivity,
+  rw [program.fix2_unroll], refl
+end
+
+lemma list_reverse_aux_spec (p r : pointer) (xs ys : list word)
+: sat (list_reverse_aux p r)
+      { pre := is_list p xs :*: is_list r ys
+      , post := λ r', is_list r' (reverse xs ++ ys) } :=
+begin
+  revert p r ys,
+  induction xs ; intros p r ys,
+  case nil
+  { simp [is_list],
+    apply context_left,
+    intro h,
+    rw [list_reverse_aux_def,if_pos h],
+    apply postcondition _ (return_spec r _),
+    intro, simp, },
+  case cons x xs
+  { simp [is_list],
+    rw [s_and_assoc],
+    apply context_left,
+    intro h,
+    rw [list_reverse_aux_def,if_neg h,s_exists_s_and_distr],
+    apply s_exists_intro_pre, intro nx,
+    apply bind_framing_left _ (read_nth_spec p 1 [x,nx] (of_as_true trivial)),
+    { rw s_and_assoc },
+    intro r, simp [nth_le,s_and_assoc],
+    apply context_left,
+    intro, subst r,
+    apply bind_framing_left _ (write_nth_spec p _ 1 [x,nx] _),
+    { refl },
+    intro x, cases x, simp [replace,const],
+    have h : is_list r ys = is_list ( word.to_word r ).to_ptr ys, { simp },
+    rw h, clear h,
+    generalize : (word.to_word r) = k,
+    apply s_exists_elim_pre k,
+    apply precondition (is_list nx.to_ptr xs :*: is_list p (x :: ys)),
+    apply ih_1 nx.to_ptr p (x :: ys),
+    { simp [is_list,embed_eq_emp h],
+      rw [s_and_s_exists_distr],
+      apply s_exists_congr,
+      intro, ac_refl },
+    { apply of_as_true, trivial } }
+end
+
+def list_reverse (p : pointer) : program pointer :=
+list_reverse_aux p 0
+
+lemma list_reverse_spec (p : pointer) (xs : list word)
+: sat (list_reverse p)
+      { pre := is_list p xs
+      , post := λ r, is_list r (reverse xs) } :=
+begin
+  unfold list_reverse,
+  apply precondition (is_list p xs :*: is_list 0 []),
+  apply postcondition _ (list_reverse_aux_spec p 0 xs []),
+  { intros, simp },
+  { simp [is_list,embed_eq_emp], }
+end
+
+def list_reverse' (p : pointer) : program pointer :=
 sorry
 
 lemma list_reverse_spec (p : pointer) (vs : list word)
@@ -553,7 +710,7 @@ lemma list_reverse_spec' (p : pointer) (vs : list word)
                          post := λ q, is_list q (list.reverse vs) } :=
 sorry
 
-def list_reverse_dup (p : pointer) : prog pointer :=
+def list_reverse_dup (p : pointer) : program pointer :=
 sorry
 
 lemma list_reverse_dup_spec (p : pointer) (vs : list word)
@@ -570,10 +727,10 @@ def is_tree : pointer → tree word → hprop
   | p (tree.node l x r) := ∃∃ lp rp : word,
           [| p ≠ 0 |] :*:
           p ↦* [lp,x,rp] :*:
-          is_tree lp.to_nat l :*:
-          is_tree rp.to_nat r
+          is_tree lp.to_ptr l :*:
+          is_tree rp.to_ptr r
 
-def free_tree : pointer → prog unit :=
+def free_tree : pointer → program unit :=
 sorry
 
 lemma free_tree_spec (p : pointer) (t : tree word)

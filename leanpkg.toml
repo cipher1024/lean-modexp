@@ -1,0 +1,6 @@
+[package]
+name = "modexp"
+version = "0.1"
+
+[dependencies]
+lean-lib = {path = "lean-lib"}
