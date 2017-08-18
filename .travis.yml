@@ -85,6 +85,7 @@ script:
 - lean --path
 - export LEAN_PATH=`pwd`:$HOME/lean/bin/../lib/lean/library:$HOME/lean/bin/../library
 - echo $LEAN_PATH
+- git submodule sync
 - leanpkg configure
 - leanpkg build
 notifications:
