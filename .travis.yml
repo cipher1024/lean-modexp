@@ -87,7 +87,7 @@ script:
 - echo $LEAN_PATH
 # - git submodule sync
 - leanpkg configure
-- lean --make
+- leanpkg build
 notifications:
   slack:
     rooms:

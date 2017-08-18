@@ -577,7 +577,6 @@ begin
   rw [program.fix_unroll,dif_eq_if], refl
 end
 
-
 def is_list : pointer → list word → hprop
   | p [] := [| p = 0 |]
   | p (v :: vs) := [| p ≠ 0 |] :*: ∃∃ nx : word, p ↦* [v,nx] :*: is_list nx.to_ptr vs
@@ -698,11 +697,6 @@ begin
 end
 
 def list_reverse' (p : pointer) : program pointer :=
-sorry
-
-lemma list_reverse_spec (p : pointer) (vs : list word)
-: sat (list_reverse p) { pre := is_list p vs,
-                         post := λ q, is_list q (list.reverse vs) } :=
 sorry
 
 lemma list_reverse_spec' (p : pointer) (vs : list word)
