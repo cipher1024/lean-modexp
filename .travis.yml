@@ -56,7 +56,7 @@ matrix:
   allow_failures:
   - env: CMAKE_CXX_COMPILER=g++-6 CMAKE_BUILD_TYPE=Release LATEST=true
 before_install:
-- if [[ $TRAVIS_OS_NAME == osx ]]; then brew update && brew install gcc && brew install
+- if [[ $TRAVIS_OS_NAME == osx ]]; then brew update && brew install coreutils gcc && brew install
   gmp; fi
 - mkdir -p $HOME/lean
 - pushd $HOME/lean
@@ -85,7 +85,8 @@ script:
 - lean --path
 - export LEAN_PATH=`pwd`:$HOME/lean/bin/../lib/lean/library:$HOME/lean/bin/../library
 - echo $LEAN_PATH
-- lean --make
+- leanpkg configure
+- leanpkg build
 notifications:
   slack:
     rooms:
