@@ -1,9 +1,12 @@
 
 import .lib.data.fin
-import .lib.data.list
 import .lib.data.pow
 
+import data.list
+
 import data.bitvec
+
+local infix ` ^ ` := pow_nat
 
 def word_size : ℕ := 32
 
@@ -22,7 +25,6 @@ lemma win_vals_gt_one
 begin
   change (2 : ℕ)^0 < _,
   unfold win_vals,
-  rw [nat_pow_def,nat_pow_def],
   apply pow_lt_pow,
   { apply nat.lt_succ_self, },
   apply window_size_pos
@@ -171,8 +173,6 @@ end list
 
 namespace mod_group
 
-infix ^ := pow
-
 namespace version0
 
 open list nat
@@ -183,7 +183,7 @@ e.reverse.foldl (λ r w, r^win_vals * p^w.val) 1
 theorem expmod_def {m : ℕ} (p : fin (succ m)) (e : list window)
 : expmod p e = p^e.to_nat :=
 begin
-  simp [expmod,foldl_eq_foldr],
+  simp [expmod,list.foldl_eq_foldr],
   induction e,
   case nil
   { simp [to_nat], },
@@ -196,8 +196,6 @@ end version0
 
 -- tentative
 namespace version1
-
-local infix ^ := pow
 
 open list
 
