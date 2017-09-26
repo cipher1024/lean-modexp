@@ -87,7 +87,7 @@ script:
 - echo $LEAN_PATH
 # - git submodule sync
 - leanpkg configure
-- leanpkg build -- --trust=0
+- leanpkg build -- --trust=2
 notifications:
   slack:
     rooms:
