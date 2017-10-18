@@ -66,7 +66,7 @@ before_install:
    then
      git pull origin master
    else
-     git checkout 839cad5fa84f05af736f34efd522005fde661a32
+     git checkout 5efa1b829cfb4df5e5f4ddaec96c6d8707d24236
    fi
 - mkdir -p build
 - cd build
