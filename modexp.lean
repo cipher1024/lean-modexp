@@ -175,7 +175,7 @@ namespace mod_group
 
 namespace version0
 
-open list nat
+open list nat (hiding pow_add)
 
 def expmod {m : ℕ} (p : fin (succ m)) (e : list window) : fin (succ m) :=
 e.reverse.foldl (λ r w, r^win_vals * p^w.val) 1
