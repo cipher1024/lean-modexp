@@ -6,3 +6,4 @@ lean_version = "master"
 [dependencies]
 mathlib = {git = "https://github.com/leanprover/mathlib", rev = "5ad8020f67eb13896a41cc7691d072c9331b1f76"}
 lean-lib = {git = "https://github.com/unitb/lean-lib", rev = "62f11865c3cf99901b19b787f7c65d383cc33a11"}
+separation-logic = {git = "https://github.com/unitb/separation-logic.git", rev = "34c5419448a56091294c112b6d6ee9635abadf8f"}
